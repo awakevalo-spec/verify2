@@ -18,7 +18,7 @@ ROLE_ID = 1458568198214516991
 REQUIRED = 7
 ROLE_DURATION_HOURS = 24
 
-# UserID -> Anzahl Screenshots
+# UserID -> Screenshot Counter
 user_counter = {}
 
 # ---------- READY ----------
@@ -45,64 +45,72 @@ async def on_message(message):
         return
 
     # Nur im Proof Channel arbeiten
-    if message.channel.id != PROOF_CHANNEL_ID:
-        await bot.process_commands(message)
-        return
+    if message.channel.id == PROOF_CHANNEL_ID:
 
-    # ❌ Keine Anhänge -> löschen
-    if not message.attachments:
-        await message.delete()
-        return
+        log_channel = bot.get_channel(LOG_CHANNEL_ID)
 
-    # Nur Bilder zählen
-    images = [
-        a for a in message.attachments
-        if a.content_type and a.content_type.startswith("image/")
-    ]
+        # ❌ Wenn keine Anhänge -> löschen + loggen
+        if not message.attachments:
+            await message.delete()
 
-    # ❌ Wenn keine Bilder -> löschen
-    if not images:
-        await message.delete()
-        return
+            if log_channel:
+                await log_channel.send(
+                    f"🗑️ Deleted text message from {message.author.mention}"
+                )
+            return
 
-    # -----------------------------
-    # AB HIER SIND NUR BILDER ERLAUBT
-    # -----------------------------
+        # Nur Bilder erlauben
+        images = [
+            a for a in message.attachments
+            if a.content_type and a.content_type.startswith("image/")
+        ]
 
-    user_id = message.author.id
-    user_counter[user_id] = user_counter.get(user_id, 0) + len(images)
-    count = user_counter[user_id]
+        # ❌ Wenn Anhänge aber keine Bilder -> löschen
+        if not images:
+            await message.delete()
 
-    log_channel = bot.get_channel(LOG_CHANNEL_ID)
-    if not log_channel:
-        return
+            if log_channel:
+                await log_channel.send(
+                    f"🗑️ Deleted non-image file from {message.author.mention}"
+                )
+            return
 
-    # ❌ Noch nicht genug Screenshots
-    if count < REQUIRED:
-        await log_channel.send(
-            f"❌ {message.author.mention} – {count}/{REQUIRED} screenshots received."
-        )
-        return
+        # -----------------------------
+        # Ab hier sind nur Bilder erlaubt
+        # -----------------------------
 
-    # ✅ APPROVED
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        user_id = message.author.id
+        user_counter[user_id] = user_counter.get(user_id, 0) + len(images)
+        count = user_counter[user_id]
 
-    await log_channel.send(
-        f"✅ {message.author.mention} approved at {now}. Role valid for 24h 😈"
-    )
+        # ❌ Noch nicht genug Screenshots
+        if count < REQUIRED:
+            if log_channel:
+                await log_channel.send(
+                    f"❌ {message.author.mention} – {count}/{REQUIRED} screenshots received."
+                )
+            return
 
-    member = message.guild.get_member(user_id)
-    role = message.guild.get_role(ROLE_ID)
+        # ✅ Approved
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    if member and role:
-        await member.add_roles(role)
-        print(f"✅ Rolle vergeben an {member}")
+        if log_channel:
+            await log_channel.send(
+                f"✅ {message.author.mention} approved at {now}. Role valid for 24h 😈"
+            )
 
-        # 24h Timer starten
-        bot.loop.create_task(remove_role_later(message.guild, user_id))
+        member = message.guild.get_member(user_id)
+        role = message.guild.get_role(ROLE_ID)
 
-    # Counter zurücksetzen
-    user_counter.pop(user_id, None)
+        if member and role:
+            await member.add_roles(role)
+            print(f"✅ Rolle vergeben an {member}")
+
+            # 24h Timer starten
+            bot.loop.create_task(remove_role_later(message.guild, user_id))
+
+        # Counter zurücksetzen
+        user_counter.pop(user_id, None)
 
     await bot.process_commands(message)
 
