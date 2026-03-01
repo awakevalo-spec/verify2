@@ -12,9 +12,9 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # ---------- CONFIG ----------
-PROOF_CHANNEL_ID = 1469356154537640063
-LOG_CHANNEL_ID = 1469356229183799407
-ROLE_ID = 1469357614012960880  # <-- HIER DEINE ROLLEN-ID
+PROOF_CHANNEL_ID = 1467104586329362677
+LOG_CHANNEL_ID = 1458565222926123109
+ROLE_ID = 1458568198214516991
 REQUIRED = 7
 ROLE_DURATION_HOURS = 24
 
@@ -37,18 +37,21 @@ async def remove_role_later(guild, user_id):
         await member.remove_roles(role)
         print(f"⏱️ Rolle entfernt von {member}")
 
-# ---------- MESSAGE ----------
+# ---------- MESSAGE EVENT ----------
 @bot.event
 async def on_message(message):
+
     if message.author.bot:
         return
 
-    # Nur Proof-Channel
+    # Nur im Proof Channel arbeiten
     if message.channel.id != PROOF_CHANNEL_ID:
+        await bot.process_commands(message)
         return
 
-    # Nur Nachrichten mit Anhängen
+    # ❌ Keine Anhänge -> löschen
     if not message.attachments:
+        await message.delete()
         return
 
     # Nur Bilder zählen
@@ -57,8 +60,14 @@ async def on_message(message):
         if a.content_type and a.content_type.startswith("image/")
     ]
 
+    # ❌ Wenn keine Bilder -> löschen
     if not images:
+        await message.delete()
         return
+
+    # -----------------------------
+    # AB HIER SIND NUR BILDER ERLAUBT
+    # -----------------------------
 
     user_id = message.author.id
     user_counter[user_id] = user_counter.get(user_id, 0) + len(images)
@@ -68,20 +77,20 @@ async def on_message(message):
     if not log_channel:
         return
 
-    # ❌ Nicht genug Screenshots
+    # ❌ Noch nicht genug Screenshots
     if count < REQUIRED:
         await log_channel.send(
-            f"❌ {message.author.mention} was denied – not enough screenshots ({count}/{REQUIRED})"
+            f"❌ {message.author.mention} – {count}/{REQUIRED} screenshots received."
         )
         return
 
     # ✅ APPROVED
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     await log_channel.send(
-        f"✅ {message.author.mention} was approved at {now}. Role valid for 24h 😈"
+        f"✅ {message.author.mention} approved at {now}. Role valid for 24h 😈"
     )
 
-    # Rolle vergeben
     member = message.guild.get_member(user_id)
     role = message.guild.get_role(ROLE_ID)
 
